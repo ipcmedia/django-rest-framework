@@ -5,7 +5,7 @@ We don't bind behaviour to http method handlers yet,
 which allows mixin classes to be composed in interesting ways.
 """
 from __future__ import unicode_literals
-
+import logging
 from django.core.exceptions import ValidationError
 from django.http import Http404
 from rest_framework import status
@@ -47,6 +47,11 @@ class CreateModelMixin(object):
     Create a model instance.
     """
     def create(self, request, *args, **kwargs):
+        logger = logging.getLogger(__name__)
+        logger.debug(
+            'Receiving create request - instance of %s',
+            type(request)
+        )
         serializer = self.get_serializer(data=request.DATA, files=request.FILES)
 
         if serializer.is_valid():

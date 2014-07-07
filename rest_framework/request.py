@@ -9,6 +9,7 @@ The wrapped request then offers a richer API, in particular :
     - form overloading of HTTP method, content type and content
 """
 from __future__ import unicode_literals
+import logging
 from django.conf import settings
 from django.http import QueryDict
 from django.http.multipartparser import parse_header
@@ -129,6 +130,7 @@ class Request(object):
         self._method = Empty
         self._content_type = Empty
         self._stream = Empty
+        self.logger = logging.getLogger(__name__)
 
         if self.parser_context is None:
             self.parser_context = {}
@@ -193,8 +195,10 @@ class Request(object):
         Similar to usual behaviour of `request.POST`, except that it handles
         arbitrary parsers, and also works on methods other than POST (eg PUT).
         """
+        self.logger.debug('Picking up DATA property')
         if not _hasattr(self, '_data'):
             self._load_data_and_files()
+        self.logger.debug('Returning DATA property: %s', type(self._data))
         return self._data
 
     @property
@@ -261,9 +265,13 @@ class Request(object):
         Parses the request content into self.DATA and self.FILES.
         """
         if not _hasattr(self, '_content_type'):
+            self.logger.debug('_content_type attribute missing, loading it')
             self._load_method_and_content_type()
 
+        self.logger.debug('_content_type set to %s', self._content_type)
+
         if not _hasattr(self, '_data'):
+            self.logger.debug('_data attribute missing, parsing it')
             self._data, self._files = self._parse()
 
     def _load_method_and_content_type(self):
@@ -306,6 +314,10 @@ class Request(object):
         content/content_type have been overridden by setting them in hidden
         form fields or not.
         """
+        self.logger.debug(
+            'Calling _perform_form_overloading, method %s',
+            self._request.method
+        )
 
         USE_FORM_OVERLOADING = (
             self._METHOD_PARAM or
@@ -319,6 +331,7 @@ class Request(object):
             return
 
         # At this point we're committed to parsing the request as form data.
+        self.logger.debug('Setting _data to %s', self._request.POST)
         self._data = self._request.POST
         self._files = self._request.FILES
 
@@ -342,15 +355,19 @@ class Request(object):
 
         May raise an `UnsupportedMediaType`, or `ParseError` exception.
         """
+        self.logger.debug('Calling the _parse method')
         stream = self.stream
         media_type = self.content_type
 
         if stream is None or media_type is None:
             empty_data = QueryDict('', encoding=self._request._encoding)
             empty_files = MultiValueDict()
+            self.logger.debug('_parse is returning empty DATA and FILES')
             return (empty_data, empty_files)
 
         parser = self.negotiator.select_parser(self, self.parsers)
+
+        self.logger.debug('Selected parser: %s', type(parser))
 
         if not parser:
             raise exceptions.UnsupportedMediaType(media_type)
@@ -369,8 +386,10 @@ class Request(object):
         # Parser classes may return the raw data, or a
         # DataAndFiles object.  Unpack the result as required.
         try:
+            self.logger.debug('_parse is trying to return DATA and FILES')
             return (parsed.data, parsed.files)
         except AttributeError:
+            self.logger.debug('_parse is falling back to originally parsed DATA and empty FILES')
             empty_files = MultiValueDict()
             return (parsed, empty_files)
 
@@ -417,4 +436,5 @@ class Request(object):
         """
         Proxy other attributes to the underlying HttpRequest object.
         """
+        self.logger.debug('Getting other attribute %s', attr)
         return getattr(self._request, attr)
